@@ -277,6 +277,8 @@ module.exports = () => ({
               {value: 'block'},
               {value: 'inline'},
               {value: 'inline-block'},
+              {value: 'table'},
+              {value: 'table-cell'},
               {value: 'none'},
             ];
           break;
