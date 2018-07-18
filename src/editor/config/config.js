@@ -98,12 +98,15 @@ module.exports = {
 
   // When false, removes empty text nodes when parsed, unless they contain a space
   keepEmptyTextNodes: 0,
-  
+
   // Return JS of components inside HTML from 'editor.getHtml()'
   jsInHtml: true,
 
   // Enable native HTML5 drag and drop
   nativeDnD: 1,
+
+  // Enable multiple selection
+  multipleSelection: 1,
 
   // Show the wrapper component in the final code, eg. in editor.getHtml()
   exportWrapper: 0,
@@ -279,6 +282,8 @@ module.exports = {
   traitManager: {},
 
   // Texts
+  textViewCode: 'Code',
 
-  textViewCode: 'Code'
+  // Keep unused styles within the editor
+  keepUnusedStyles: 0
 };

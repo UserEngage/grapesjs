@@ -1,43 +1,26 @@
 /**
+ * You can customize the initial state of the module from the editor initialization, by passing the following [Configuration Object](https://github.com/artf/grapesjs/blob/master/src/commands/config/config.js)
+ * ```js
+ * const editor = grapesjs.init({
+ *  commands: {
+ *    // options
+ *  }
+ * })
+ * ```
+ *
+ * Once the editor is instantiated you can use its API. Before using these methods you should get the module from the instance
+ *
+ * ```js
+ * const commands = editor.Commands;
+ * ```
  *
  * * [add](#add)
  * * [get](#get)
  * * [has](#has)
  *
- * You can init the editor with all necessary commands via configuration
- *
- * ```js
- * var editor = grapesjs.init({
- * 	...
- *  commands: {...} // Check below for the properties
- * 	...
- * });
- * ```
- *
- * Before using methods you should get first the module from the editor instance, in this way:
- *
- * ```js
- * var commands = editor.Commands;
- * ```
- *
  * @module Commands
- * @param {Object} config Configurations
- * @param {Array<Object>} [config.defaults=[]] Array of possible commands
- * @example
- * ...
- * commands: {
- * 	defaults: [{
- * 		id: 'helloWorld',
- * 		run:  function(editor, sender){
- * 			alert('Hello world!');
- * 		},
- * 		stop:  function(editor, sender){
- * 			alert('Stop!');
- * 		},
- * 	}],
- * },
- * ...
  */
+
 import { isFunction } from 'underscore';
 
 module.exports = () => {
@@ -46,7 +29,7 @@ module.exports = () => {
     commands = {},
     defaultCommands = {},
     defaults = require('./config/config'),
-    AbsCommands = require('./view/CommandAbstract');
+    CommandAbstract = require('./view/CommandAbstract');
 
   // Need it here as it would be used below
   var add = function(id, obj) {
@@ -56,11 +39,13 @@ module.exports = () => {
 
     delete obj.initialize;
     obj.id = id;
-    commands[id] = AbsCommands.extend(obj);
+    commands[id] = CommandAbstract.extend(obj);
     return this;
   };
 
   return {
+    CommandAbstract,
+
     /**
      * Name of the module
      * @type {String}
@@ -118,18 +103,8 @@ module.exports = () => {
 
       defaultCommands['tlb-clone'] = {
         run(ed) {
-          var sel = ed.getSelected();
-
-          if (!sel || !sel.get('copyable')) {
-            console.warn('The element is not clonable');
-            return;
-          }
-
-          var collection = sel.collection;
-          var index = collection.indexOf(sel);
-          const added = collection.add(sel.clone(), { at: index + 1 });
-          sel.emitUpdate();
-          ed.trigger('component:clone', added);
+          ed.runCommand('core:copy');
+          ed.runCommand('core:paste');
         }
       };
 
@@ -139,12 +114,14 @@ module.exports = () => {
           const em = ed.getModel();
           const event = opts && opts.event;
           const sel = ed.getSelected();
+          const selAll = [...ed.getSelectedAll()];
           const toolbarStyle = ed.Canvas.getToolbarEl().style;
           const nativeDrag = event && event.type == 'dragstart';
+          const defComOptions = { preserveSelected: 1 };
 
           const hideTlb = () => {
             toolbarStyle.display = 'none';
-            em.stopDefault();
+            em.stopDefault(defComOptions);
           };
 
           if (!sel || !sel.get('draggable')) {
@@ -164,8 +141,9 @@ module.exports = () => {
           };
 
           const onEnd = (e, opts) => {
-            em.runDefault();
-            em.setSelected(sel);
+            em.runDefault(defComOptions);
+            selAll.forEach(sel => sel.set('status', 'selected'));
+            ed.select(selAll);
             sel.emitUpdate();
             dragger && dragger.blur();
           };
@@ -194,51 +172,31 @@ module.exports = () => {
 
             const cmdMove = ed.Commands.get('move-comp');
             cmdMove.onEndMoveFromModel = onEnd;
-            cmdMove.initSorterFromModel(sel);
+            cmdMove.initSorterFromModels(selAll);
           }
 
-          sel.set('status', 'freezed-selected');
+          selAll.forEach(sel => sel.set('status', 'freezed-selected'));
         }
       };
 
       // Core commands
       defaultCommands['core:undo'] = e => e.UndoManager.undo();
       defaultCommands['core:redo'] = e => e.UndoManager.redo();
-      defaultCommands['core:canvas-clear'] = e => {
-        e.DomComponents.clear();
-        e.CssComposer.clear();
-      };
-      defaultCommands['core:copy'] = ed => {
-        const em = ed.getModel();
-        const model = ed.getSelected();
-
-        if (model && model.get('copyable') && !ed.Canvas.isInputFocused()) {
-          em.set('clipboard', model);
-        }
-      };
-      defaultCommands['core:paste'] = ed => {
-        const em = ed.getModel();
-        const clp = em.get('clipboard');
-        const model = ed.getSelected();
-        const coll = model && model.collection;
-
-        if (coll && clp && !ed.Canvas.isInputFocused()) {
-          const at = coll.indexOf(model) + 1;
-          coll.add(clp.clone(), { at });
-        }
-      };
-      defaultCommands['core:component-delete'] = (ed, sender, opts = {}) => {
-        let component = opts.component || ed.getSelected();
-
-        if (!component || !component.get('removable')) {
-          console.warn('The element is not removable');
-          return;
-        }
-
-        ed.select(null);
-        component.destroy();
-        return component;
-      };
+      [
+        ['copy', 'CopyComponent'],
+        ['paste', 'PasteComponent'],
+        ['component-next', 'ComponentNext'],
+        ['component-prev', 'ComponentPrev'],
+        ['component-enter', 'ComponentEnter'],
+        ['component-exit', 'ComponentExit'],
+        ['canvas-clear', 'CanvasClear'],
+        ['component-delete', 'ComponentDelete']
+      ].forEach(
+        item =>
+          (defaultCommands[`core:${item[0]}`] = require(`./view/${
+            item[1]
+          }`).run)
+      );
 
       if (c.em) c.model = c.em.get('Canvas');
 
@@ -306,6 +264,17 @@ module.exports = () => {
       }
 
       return this;
+    },
+
+    /**
+     * Create anonymous Command instance
+     * @param {Object} command Command object
+     * @return {Command}
+     * @private
+     * */
+    create(command) {
+      const cmd = CommandAbstract.extend(command);
+      return new cmd(c);
     }
   };
 };

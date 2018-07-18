@@ -1,3 +1,4 @@
+import Backbone from 'backbone';
 import { isObject } from 'underscore';
 import { on, off, hasDnd } from 'utils/mixins';
 
@@ -5,6 +6,7 @@ module.exports = Backbone.View.extend({
   events: {
     mousedown: 'startDrag',
     dragstart: 'handleDragStart',
+    drag: 'handleDrag',
     dragend: 'handleDragEnd'
   },
 
@@ -33,7 +35,8 @@ module.exports = Backbone.View.extend({
   },
 
   handleDragStart(ev) {
-    const content = this.model.get('content');
+    const { em, model } = this;
+    const content = model.get('content');
     const isObj = isObject(content);
     const type = isObj ? 'text/json' : 'text';
     const data = isObj ? JSON.stringify(content) : content;
@@ -42,11 +45,42 @@ module.exports = Backbone.View.extend({
     // but will use dragContent as I need it for the Sorter context
     // IE11 supports only 'text' data type
     ev.dataTransfer.setData('text', data);
-    this.em.set('dragContent', content);
+    em.set('dragContent', content);
+    em.trigger('block:drag:start', model, ev);
+  },
+
+  handleDrag(ev) {
+    this.em.trigger('block:drag', this.model, ev);
   },
 
   handleDragEnd() {
-    this.em.set('dragContent', '');
+    const { em, model } = this;
+    const result = em.get('dragResult');
+
+    if (result) {
+      const oldKey = 'activeOnRender';
+      const oldActive = result.get && result.get(oldKey);
+
+      if (model.get('activate') || oldActive) {
+        result.trigger('active');
+        result.set(oldKey, 0);
+      }
+
+      if (model.get('select')) {
+        em.setSelected(result);
+      }
+
+      if (model.get('resetId')) {
+        result.onAll(model => model.resetId());
+      }
+    }
+
+    em.set({
+      dragResult: null,
+      dragContent: null
+    });
+
+    em.trigger('block:drag:stop', result, model);
   },
 
   /**

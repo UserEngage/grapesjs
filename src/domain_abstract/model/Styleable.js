@@ -43,8 +43,8 @@ export default {
       const em = this.em;
       this.trigger(`change:style:${pr}`);
       if (em) {
-        em.trigger(`styleable:change`);
-        em.trigger(`styleable:change:${pr}`);
+        em.trigger(`styleable:change`, this, pr);
+        em.trigger(`styleable:change:${pr}`, this, pr);
       }
     });
 
@@ -95,7 +95,7 @@ export default {
       const imp = opts.important;
       const important = isArray(imp) ? imp.indexOf(prop) >= 0 : imp;
       const value = `${style[prop]}${important ? ' !important' : ''}`;
-      result.push(`${prop}:${value};`);
+      value && result.push(`${prop}:${value};`);
     }
 
     return result.join('');

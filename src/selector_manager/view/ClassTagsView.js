@@ -1,4 +1,5 @@
-var Backbone = require('backbone');
+import _ from 'underscore';
+import Backbone from 'backbone';
 var ClassTagView = require('./ClassTagView');
 
 module.exports = Backbone.View.extend({
@@ -51,11 +52,7 @@ module.exports = Backbone.View.extend({
     this.target = this.config.em;
     this.em = this.target;
 
-    this.listenTo(
-      this.target,
-      'change:selectedComponent',
-      this.componentChanged
-    );
+    this.listenTo(this.target, 'component:toggled', this.componentChanged);
     this.listenTo(this.target, 'component:update:classes', this.updateSelector);
 
     this.listenTo(this.collection, 'add', this.addNew);
@@ -137,7 +134,7 @@ module.exports = Backbone.View.extend({
    * @private
    */
   componentChanged(e) {
-    this.compTarget = this.target.get('selectedComponent');
+    this.compTarget = this.target.getSelected();
     const target = this.compTarget;
     let validSelectors = [];
 

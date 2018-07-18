@@ -49,10 +49,10 @@ module.exports = ComponentView.extend({
    * @private
    * */
   updateSrc() {
-    const src = this.model.get('src');
-    const el = this.$el;
-    el.attr('src', src);
-    el[src ? 'removeClass' : 'addClass'](this.classEmpty);
+    const { model, classEmpty, $el } = this;
+    const src = model.get('src');
+    model.addAttributes({ src });
+    $el[src ? 'removeClass' : 'addClass'](classEmpty);
   },
 
   /**
@@ -67,6 +67,8 @@ module.exports = ComponentView.extend({
     if (editor && this.model.get('editable')) {
       editor.runCommand('open-assets', {
         target: this.model,
+        types: ['image'],
+        accept: 'image/*',
         onSelect() {
           editor.Modal.close();
           editor.AssetManager.setTarget(null);

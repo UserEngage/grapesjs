@@ -1,4 +1,18 @@
 /**
+ * With this module is possible to manage components inside the canvas. You can customize the initial state of the module from the editor initialization, by passing the following [Configuration Object](https://github.com/artf/grapesjs/blob/master/src/dom_components/config/config.js)
+ * ```js
+ * const editor = grapesjs.init({
+ *  domComponents: {
+ *    // options
+ *  }
+ * })
+ * ```
+ *
+ * Once the editor is instantiated you can use its API. Before using these methods you should get the module from the instance
+ *
+ * ```js
+ * const domComponents = editor.DomComponents;
+ * ```
  *
  * * [getWrapper](#getwrapper)
  * * [getComponents](#getcomponents)
@@ -8,30 +22,11 @@
  * * [store](#store)
  * * [render](#render)
  *
- * With this module is possible to manage components inside the canvas.
- * Before using methods you should get first the module from the editor instance, in this way:
- *
- * ```js
- * var domComponents = editor.DomComponents;
- * ```
- *
  * @module DomComponents
- * @param {Object} config Configurations
- * @param {string|Array<Object>} [config.components=[]] HTML string or an array of possible components
- * @example
- * ...
- * domComponents: {
- *    components: '<div>Hello world!</div>',
- * }
- * // Or
- * domComponents: {
- *    components: [
- *      { tagName: 'span', style: {color: 'red'}, content: 'Hello'},
- *      { style: {width: '100px', content: 'world!'}}
- *    ],
- * }
- * ...
  */
+
+import { isEmpty } from 'underscore';
+
 module.exports = () => {
   var c = {};
   let em;
@@ -82,6 +77,11 @@ module.exports = () => {
       id: 'link',
       model: require('./model/ComponentLink'),
       view: require('./view/ComponentLinkView')
+    },
+    {
+      id: 'label',
+      model: require('./model/ComponentLabel'),
+      view: require('./view/ComponentLabelView')
     },
     {
       id: 'video',
@@ -167,6 +167,7 @@ module.exports = () => {
     init(config) {
       c = config || {};
       em = c.em;
+      this.em = em;
 
       if (em) {
         c.components = em.config.components || c.components;
@@ -184,7 +185,15 @@ module.exports = () => {
         c.modal = em.get('Modal') || '';
         c.am = em.get('AssetManager') || '';
         em.get('Parser').compTypes = componentTypes;
-        em.on('change:selectedComponent', this.componentChanged, this);
+        em.on('change:componentHovered', this.componentHovered, this);
+
+        const selected = em.get('selected');
+        em.listenTo(selected, 'add', (sel, c, opts) =>
+          this.selectAdd(sel, opts)
+        );
+        em.listenTo(selected, 'remove', (sel, c, opts) =>
+          this.selectRemove(sel, opts)
+        );
       }
 
       // Build wrapper
@@ -362,7 +371,7 @@ module.exports = () => {
     },
 
     /**
-     * Returns root component inside the canvas. Something like <body> inside HTML page
+     * Returns root component inside the canvas. Something like `<body>` inside HTML page
      * The wrapper doesn't differ from the original Component Model
      * @return {Component} Root Component
      * @example
@@ -454,8 +463,7 @@ module.exports = () => {
      * @return {this}
      */
     clear() {
-      var c = this.getComponents();
-      for (var i = 0, len = c.length; i < len; i++) c.pop();
+      this.getComponents().reset();
       return this;
     },
 
@@ -503,23 +511,49 @@ module.exports = () => {
       return;
     },
 
+    selectAdd(component, opts = {}) {
+      if (component) {
+        component.set({
+          status: 'selected'
+        });
+        ['component:selected', 'component:toggled'].forEach(event =>
+          this.em.trigger(event, component, opts)
+        );
+      }
+    },
+
+    selectRemove(component, opts = {}) {
+      if (component) {
+        const { em } = this;
+        component.set({
+          status: '',
+          state: ''
+        });
+        ['component:deselected', 'component:toggled'].forEach(event =>
+          this.em.trigger(event, component, opts)
+        );
+      }
+    },
+
     /**
-     * Triggered when the selected component is changed
+     * Triggered when the component is hovered
      * @private
      */
-    componentChanged() {
+    componentHovered() {
       const em = c.em;
-      const model = em.get('selectedComponent');
-      const previousModel = em.previous('selectedComponent');
+      const model = em.get('componentHovered');
+      const previous = em.previous('componentHovered');
+      const state = 'hovered';
 
       // Deselect the previous component
-      previousModel &&
-        previousModel.set({
+      previous &&
+        previous.get('status') == state &&
+        previous.set({
           status: '',
           state: ''
         });
 
-      model && model.set('status', 'selected');
+      model && isEmpty(model.get('status')) && model.set('status', state);
     }
   };
 };

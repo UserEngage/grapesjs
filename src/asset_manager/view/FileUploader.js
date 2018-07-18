@@ -1,3 +1,5 @@
+import _ from 'underscore';
+import Backbone from 'backbone';
 import fetch from 'utils/fetch';
 
 module.exports = Backbone.View.extend(
@@ -5,7 +7,7 @@ module.exports = Backbone.View.extend(
     template: _.template(`
   <form>
     <div id="<%= pfx %>title"><%= title %></div>
-    <input type="file" id="<%= uploadId %>" name="file" accept="image/*" <%= disabled ? 'disabled' : '' %> multiple/>
+    <input type="file" id="<%= uploadId %>" name="file" accept="*/*" <%= disabled ? 'disabled' : '' %> multiple/>
     <div style="clear:both;"></div>
   </form>
   `),

@@ -4,7 +4,8 @@ const ComponentView = require('./ComponentView');
 
 module.exports = ComponentView.extend({
   events: {
-    dblclick: 'enableEditing'
+    dblclick: 'enableEditing',
+    input: 'onInput'
   },
 
   initialize(o) {
@@ -21,7 +22,8 @@ module.exports = ComponentView.extend({
    * Enable element content editing
    * @private
    * */
-  enableEditing() {
+  enableEditing(e) {
+    e && e.stopPropagation && e.stopPropagation();
     const rte = this.rte;
 
     if (this.rteEnabled || !this.model.get('editable')) {
@@ -93,6 +95,17 @@ module.exports = ComponentView.extend({
   },
 
   /**
+   * Callback on input event
+   * @param  {Event} e
+   */
+  onInput(e) {
+    const { em } = this;
+
+    // Update toolbars
+    em && em.trigger('change:canvasOffset');
+  },
+
+  /**
    * Isolate disable propagation method
    * @param {Event}
    * @private
@@ -108,6 +121,7 @@ module.exports = ComponentView.extend({
   toggleEvents(enable) {
     var method = enable ? 'on' : 'off';
     const mixins = { on, off };
+    this.em.setEditing(enable);
 
     // The ownerDocument is from the frame
     var elDocs = [this.el.ownerDocument, document];

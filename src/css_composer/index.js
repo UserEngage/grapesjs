@@ -1,20 +1,34 @@
 /**
- * This module contains and manage CSS rules for the template inside the canvas
- * Before using the methods you should get first the module from the editor instance, in this way:
- *
+ * This module contains and manage CSS rules for the template inside the canvas.
+ * You can customize the initial state of the module from the editor initialization, by passing the following [Configuration Object](https://github.com/artf/grapesjs/blob/master/src/css_composer/config/config.js)
  * ```js
- * var cssComposer = editor.CssComposer;
+ * const editor = grapesjs.init({
+ *  cssComposer: {
+ *    // options
+ *  }
+ * })
  * ```
  *
+ * Once the editor is instantiated you can use its API. Before using these methods you should get the module from the instance
+ *
+ * ```js
+ * const cssComposer = editor.CssComposer;
+ * ```
+ *
+ * * [load](#load)
+ * * [store](#store)
+ * * [add](#add)
+ * * [get](#get)
+ * * [getAll](#getall)
+ * * [clear](#clear)
+ * * [setIdRule](#setidrule)
+ * * [getIdRule](#getidrule)
+ * * [setClassRule](#setclassrule)
+ * * [getClassRule](#getclassrule)
+ *
  * @module CssComposer
- * @param {Object} config Configurations
- * @param {string|Array<Object>} [config.rules=[]] CSS string or an array of rule objects
- * @example
- * ...
- * CssComposer: {
- *    rules: '.myClass{ color: red}',
- * }
  */
+
 import { isArray } from 'underscore';
 
 module.exports = () => {
@@ -94,22 +108,25 @@ module.exports = () => {
     postLoad(em) {
       const ev = 'add remove';
       const rules = this.getAll();
+      const um = em.get('UndoManager');
+      um && um.add(rules);
       em.stopListening(rules, ev, this.handleChange);
       em.listenTo(rules, ev, this.handleChange);
-      rules.each(rule => this.handleChange(rule));
+      rules.each(rule => this.handleChange(rule, { avoidStore: 1 }));
     },
 
     /**
      * Handle rule changes
      * @private
      */
-    handleChange(model) {
+    handleChange(model, opts = {}) {
       const ev = 'change:style';
       const um = em.get('UndoManager');
       um && um.add(model);
       const handleUpdates = em.handleUpdates.bind(em);
       em.stopListening(model, ev, handleUpdates);
       em.listenTo(model, ev, handleUpdates);
+      !opts.avoidStore && handleUpdates('', '', opts);
     },
 
     /**

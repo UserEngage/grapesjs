@@ -1,5 +1,7 @@
 import {
   isUndefined,
+  isFunction,
+  isObject,
   isArray,
   isEmpty,
   isBoolean,
@@ -7,6 +9,7 @@ import {
   clone,
   isString,
   forEach,
+  result,
   keys
 } from 'underscore';
 import { shallowDiff, hasDnd } from 'utils/mixins';
@@ -23,6 +26,8 @@ let componentIndex = 0;
 const escapeRegExp = str => {
   return str.replace(/[|\\{}()[\]^$+*?.]/g, '\\$&');
 };
+
+const avoidInline = em => em && em.getConfig('avoidInlineStyle');
 
 const Component = Backbone.Model.extend(Styleable).extend(
   {
@@ -177,7 +182,6 @@ const Component = Backbone.Model.extend(Styleable).extend(
       this.config = opt.config || {};
       this.ccid = Component.createId(this);
       this.set('attributes', this.get('attributes') || {});
-      this.on('remove', this.handleRemove);
       this.listenTo(this, 'change:script', this.scriptUpdated);
       this.listenTo(this, 'change:traits', this.traitsUpdated);
       this.listenTo(this, 'change:tagName', this.tagUpdated);
@@ -195,16 +199,6 @@ const Component = Backbone.Model.extend(Styleable).extend(
         )
       );
       this.init();
-    },
-
-    /**
-     * Triggered on model remove
-     * @param {Model} removed Removed model
-     * @private
-     */
-    handleRemove(removed) {
-      const em = this.em;
-      em && em.trigger('component:remove', removed);
     },
 
     /**
@@ -261,6 +255,19 @@ const Component = Backbone.Model.extend(Styleable).extend(
       const at = coll.indexOf(this);
       coll.remove(this);
       coll.add(this, { at });
+    },
+
+    /**
+     * Replace a component with another one
+     * @param {String|Component} el Component or HTML string
+     * @return {Array|Component} New added component/s
+     * @private
+     */
+    replaceWith(el) {
+      const coll = this.collection;
+      const at = coll.indexOf(this);
+      coll.remove(this);
+      return coll.add(el, { at });
     },
 
     /**
@@ -348,16 +355,31 @@ const Component = Backbone.Model.extend(Styleable).extend(
      * @return {Object}
      */
     getAttributes() {
+      const { em } = this;
       const classes = [];
       const attributes = { ...this.get('attributes') };
+      const sm = em && em.get('SelectorManager');
+      const id = this.getId();
 
       // Add classes
       this.get('classes').each(cls => classes.push(cls.get('name')));
       classes.length && (attributes.class = classes.join(' '));
 
-      // If style is not empty I need an ID attached to the component
-      if (!isEmpty(this.getStyle()) && !has(attributes, 'id')) {
-        attributes.id = this.getId();
+      // Check if we need an ID on the component
+      if (!has(attributes, 'id')) {
+        let hasStyle;
+
+        // If we don't rely on inline styling we have to check
+        // for the ID selector
+        if (avoidInline(em)) {
+          hasStyle = sm && sm.get(id, sm.Selector.TYPE_ID);
+        } else if (!isEmpty(this.getStyle())) {
+          hasStyle = 1;
+        }
+
+        if (hasStyle) {
+          attributes.id = this.getId();
+        }
       }
 
       return attributes;
@@ -447,10 +469,10 @@ const Component = Backbone.Model.extend(Styleable).extend(
      * @param {Object} [opts={}] Options, same as in `model.add()`(from backbone)
      * @return {Array} Array of appended components
      * @example
-     * someModel.get('components').lenght // -> 0
+     * someModel.get('components').length // -> 0
      * const videoComponent = someModel.append('<video></video><div></div>')[0];
      * // This will add 2 components (`video` and `div`) to your `someModel`
-     * someModel.get('components').lenght // -> 2
+     * someModel.get('components').length // -> 2
      * // You can pass components directly
      * otherModel.append(otherModel2);
      * otherModel.append([otherModel3, otherModel4]);
@@ -639,7 +661,10 @@ const Component = Backbone.Model.extend(Styleable).extend(
         attr.style = style;
       }
 
-      return new this.constructor(attr, opts);
+      return new this.constructor(
+        attr,
+        opts
+      );
     },
 
     /**
@@ -670,13 +695,23 @@ const Component = Backbone.Model.extend(Styleable).extend(
      * @return {string} HTML string
      * @private
      */
-    toHTML(opts) {
+    toHTML(opts = {}) {
       const model = this;
       const attrs = [];
       const classes = [];
       const tag = model.get('tagName');
       const sTag = model.get('void');
-      const attributes = this.getAttrToHTML();
+      const customAttr = opts.attributes;
+      let attributes = this.getAttrToHTML();
+
+      // Get custom attributes if requested
+      if (customAttr) {
+        if (isFunction(customAttr)) {
+          attributes = customAttr(model, attributes) || {};
+        } else if (isObject(customAttr)) {
+          attributes = customAttr;
+        }
+      }
 
       for (let attr in attributes) {
         const val = attributes[attr];
@@ -695,7 +730,7 @@ const Component = Backbone.Model.extend(Styleable).extend(
       let code = `<${tag}${attrString}${sTag ? '/' : ''}>${model.get(
         'content'
       )}`;
-      model.get('components').each(comp => (code += comp.toHTML()));
+      model.get('components').each(comp => (code += comp.toHTML(opts)));
       !sTag && (code += `</${tag}>`);
 
       return code;
@@ -725,10 +760,10 @@ const Component = Backbone.Model.extend(Styleable).extend(
       delete obj.toolbar;
 
       if (this.em.getConfig('avoidDefaults')) {
-        const defaults = this.defaults;
+        const defaults = result(this, 'defaults');
 
         forEach(defaults, (value, key) => {
-          if (key !== 'type' && obj[key] === value) {
+          if (['type', 'content'].indexOf(key) === -1 && obj[key] === value) {
             delete obj[key];
           }
         });
@@ -760,6 +795,18 @@ const Component = Backbone.Model.extend(Styleable).extend(
     getId() {
       let attrs = this.get('attributes') || {};
       return attrs.id || this.ccid || this.cid;
+    },
+
+    /**
+     * Return model id
+     * @param {String} id
+     * @return {self}
+     */
+    setId(id) {
+      const attrs = { ...this.get('attributes') };
+      attrs.id = id;
+      this.set('attributes', attrs);
+      return this;
     },
 
     /**
@@ -812,6 +859,36 @@ const Component = Backbone.Model.extend(Styleable).extend(
       const em = this.em;
       const event = 'component:update' + (property ? `:${property}` : '');
       em && em.trigger(event, this);
+    },
+
+    /**
+     * Execute callback function on all components
+     * @param  {Function} clb Callback function, the model is passed as an argument
+     * @return {self}
+     */
+    onAll(clb) {
+      if (isFunction(clb)) {
+        clb(this);
+        this.components().forEach(model => model.onAll(clb));
+      }
+      return this;
+    },
+
+    /**
+     * Reset id of the component and any of its style rule
+     * @param {Object} [opts={}] Options
+     * @return {self}
+     */
+    resetId(opts = {}) {
+      const { em } = this;
+      const oldId = this.getId();
+      if (!oldId) return;
+      const newId = Component.createId(this);
+      this.setId(newId);
+      const rule = em && em.get('CssComposer').getIdRule(oldId);
+      const selector = rule && rule.get('selectors').at(0);
+      selector && selector.set('name', newId);
+      return this;
     }
   },
   {
