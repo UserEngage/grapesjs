@@ -109,6 +109,11 @@ module.exports = () => {
       view: require('./view/ComponentTextNodeView')
     },
     {
+      id: 'commentnode',
+      model: require('./model/ComponentCommentNode'),
+      view: require('./view/ComponentCommentNodeView')
+    },
+    {
       id: 'text',
       model: require('./model/ComponentText'),
       view: require('./view/ComponentTextView')
